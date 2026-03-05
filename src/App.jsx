@@ -433,6 +433,8 @@ function ScanStation({ medications, setMedications, setLog, notify }) {
   const [stationId, setStationId] = useState("Station 1");
   const [rxNote, setRxNote] = useState("");
   const [debugInfo, setDebugInfo] = useState("Waiting for scan...");
+  const [manualNDC, setManualNDC] = useState("");
+  const [showManual, setShowManual] = useState(false);
   const inputRef = { current: null };
   const timerRef = { current: null };
 
@@ -640,12 +642,48 @@ function ScanStation({ medications, setMedications, setLog, notify }) {
 
       {/* WAITING FOR SCAN */}
       {!matchedMed && !fdaLookup && (
-        <div style={st.scanBox} onClick={focusInput}>
+        <div style={st.scanBox} onClick={() => { if (!showManual) focusInput(); }}>
           <div style={{ fontSize: "56px", marginBottom: "14px" }}>📷</div>
           <div style={{ fontSize: "20px", fontWeight: "700", color: "#1a2744", marginBottom: "8px" }}>
             {staffName.trim() ? "Ready to Scan" : "Enter your name above, then scan"}
           </div>
-          <div style={{ fontSize: "14px", color: "#6b7fa3" }}>Point your Zebra scanner at the bottle barcode</div>
+          <div style={{ fontSize: "14px", color: "#6b7fa3", marginBottom: "20px" }}>Point your Zebra scanner at the bottle barcode</div>
+
+          {/* Manual NDC entry */}
+          {!showManual ? (
+            <button onClick={e => { e.stopPropagation(); setShowManual(true); }} style={{ padding: "8px 20px", background: "transparent", border: "1px solid #d0dae8", borderRadius: "8px", color: "#6b7fa3", fontSize: "13px", fontWeight: "600", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+              ⌨️ Enter NDC manually
+            </button>
+          ) : (
+            <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: "8px", maxWidth: "360px", margin: "0 auto" }}>
+              <input
+                autoFocus
+                style={{ flex: 1, padding: "10px 14px", border: "2px solid #2563eb", borderRadius: "8px", fontSize: "14px", fontFamily: "'IBM Plex Sans', sans-serif", outline: "none", color: "#1a2744", textAlign: "center", letterSpacing: "1px" }}
+                placeholder="e.g. 52937-001-20"
+                value={manualNDC}
+                onChange={e => setManualNDC(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && manualNDC.trim()) {
+                    const clean = manualNDC.replace(/[-\s]/g, "");
+                    setShowManual(false);
+                    setManualNDC("");
+                    processScan(manualNDC.trim());
+                  }
+                  if (e.key === "Escape") { setShowManual(false); setManualNDC(""); focusInput(); }
+                }}
+              />
+              <button
+                onClick={() => { if (manualNDC.trim()) { setShowManual(false); processScan(manualNDC.trim()); setManualNDC(""); } }}
+                style={{ padding: "10px 16px", background: "#2563eb", border: "none", borderRadius: "8px", color: "#fff", fontWeight: "700", fontSize: "14px", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                Search
+              </button>
+              <button
+                onClick={() => { setShowManual(false); setManualNDC(""); setTimeout(focusInput, 100); }}
+                style={{ padding: "10px 12px", background: "#f1f5f9", border: "1px solid #d0dae8", borderRadius: "8px", color: "#64748b", fontSize: "13px", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -839,10 +877,10 @@ export default function PharmacyInventory() {
 
   const s = {
     app: { minHeight: "100vh", background: "#f0f4f8", color: "#1a2744", fontFamily: "'IBM Plex Sans', sans-serif" },
-    header: { background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 },
+    header: { background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 28px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10, minHeight: "56px" },
     logo: { fontSize: "19px", fontWeight: "700", color: "#1a2744" },
     logoRx: { color: "#7eb8f7", fontWeight: "800" },
-    tabs: { display: "flex", gap: "2px", background: "#eef2f7", borderRadius: "8px", padding: "3px", overflowX: "auto" },
+    tabs: { display: "flex", gap: "2px", background: "#eef2f7", borderRadius: "8px", padding: "3px", overflowX: "auto", flex: 1, justifyContent: "center", margin: "8px 24px" },
     tabBtn: (active, t) => ({ padding: "7px 13px", borderRadius: "6px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600", fontFamily: "'IBM Plex Sans', sans-serif", whiteSpace: "nowrap", background: active ? (t === "🔫 Scan Station" ? "#10b981" : "#2563eb") : "transparent", color: active ? "#fff" : "#93b4d8", transition: "all 0.18s" }),
     body: { maxWidth: "1150px", margin: "0 auto", padding: "22px 16px" },
     statGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "20px" },
