@@ -1,0 +1,150 @@
+================================================
+  RxTrack Local Network Setup Guide
+  Pharmacy Inventory & Scan Station System
+================================================
+
+WHAT THIS DOES
+--------------
+Runs RxTrack on one computer in your pharmacy.
+Every other computer, tablet, and phone on your
+WiFi/network can access it by opening a browser.
+Nothing goes to the internet. All data stays local.
+
+
+STEP 1 — INSTALL NODE.JS (one time only)
+-----------------------------------------
+1. On the computer that will HOST RxTrack, open
+   a web browser and go to:
+
+       https://nodejs.org
+
+2. Click the big green "LTS" download button
+   (LTS = Long Term Support, most stable version)
+
+3. Run the installer. Click Next through all steps.
+   Keep all default settings.
+
+4. When done, restart the computer.
+
+
+STEP 2 — COPY THE RXTRACK FOLDER
+----------------------------------
+1. Copy the entire "rxtrack-setup" folder to the
+   host computer. Suggested location:
+
+       C:\RxTrack\
+
+2. Your folder should contain:
+     - index.html
+     - package.json
+     - vite.config.js
+     - START-RXTRACK.bat
+     - src\
+         App.jsx
+         main.jsx
+
+
+STEP 3 — START RXTRACK
+------------------------
+1. Double-click  START-RXTRACK.bat
+
+2. The FIRST time only, it will install packages
+   automatically (takes about 1 minute).
+
+3. A black window will open showing something like:
+
+   ==========================================
+
+    RxTrack is RUNNING!
+
+    Open on THIS computer:
+    http://localhost:3000
+
+    Open on ANY station/phone on your network:
+    http://192.168.1.45:3000
+
+   ==========================================
+
+4. Open any browser and go to the address shown.
+   RxTrack will load just like a website.
+
+
+STEP 4 — ACCESS FROM OTHER STATIONS
+-------------------------------------
+On any other computer, tablet, or phone connected
+to the same pharmacy network/WiFi:
+
+1. Open any web browser (Chrome, Edge, Safari, etc.)
+2. Type the NETWORK address shown in the black window
+   Example:  http://192.168.1.45:3000
+3. Bookmark it for easy access
+
+TIP: The IP address (192.168.x.x) may change if you
+restart the host computer. If it stops working, just
+check the black window again for the new address.
+To make it permanent, ask your IT person to assign
+a "static IP" to the host computer.
+
+
+STEP 5 — AUTO-START ON BOOT (OPTIONAL)
+----------------------------------------
+To have RxTrack start automatically when the host
+computer turns on:
+
+1. Press Windows key + R
+2. Type:  shell:startup
+3. Press Enter — a folder opens
+4. Right-click START-RXTRACK.bat → Create Shortcut
+5. Move the shortcut into the startup folder
+
+Now RxTrack starts automatically every morning
+when the computer boots up.
+
+
+KEEPING IT RUNNING ALL DAY
+----------------------------
+- Keep the black command window OPEN all day.
+  Closing it stops RxTrack for everyone.
+- If a station gets an error, check that the
+  black window is still open on the host computer.
+- The host computer should NOT go to sleep.
+  (Control Panel → Power Options → Never sleep)
+
+
+TROUBLESHOOTING
+----------------
+Problem: "Node.js is not installed" error
+Fix: Complete Step 1 again. Make sure to restart
+     after installing.
+
+Problem: Other stations can't connect
+Fix: Check Windows Firewall — allow Node.js through
+     (Windows will usually ask automatically)
+     Or temporarily turn off firewall to test.
+
+Problem: Address changed after restart
+Fix: Ask IT to set a static IP, or just check the
+     black window for the new address each morning.
+
+Problem: Page won't load on this computer either
+Fix: Make sure you typed http:// not https://
+     Try: http://localhost:3000
+
+
+SECURITY NOTE
+--------------
+RxTrack only runs on your LOCAL network.
+It is NOT accessible from outside your building.
+Your inventory data stays on your computers only.
+
+
+SUPPORT
+--------
+Save the RxTrack .jsx file as a backup.
+All data is stored in the browser's local storage
+on whatever computer/tablet you use to access it.
+
+For updates or changes, the .jsx file in the
+src\ folder is the entire application.
+
+================================================
