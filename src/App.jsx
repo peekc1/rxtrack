@@ -759,22 +759,22 @@ export default function PharmacyInventory() {
   const [dispenseForm, setDispenseForm] = useState(emptyDispense);
 
   useEffect(() => {
-    (async () => {
+    (() => {
       try {
-        const m = await window.storage.get("pharm-meds-v3");
-        if (m) setMedications(JSON.parse(m.value));
-        const o = await window.storage.get("pharm-orders-v3");
-        if (o) setOrders(JSON.parse(o.value));
-        const l = await window.storage.get("pharm-log-v3");
-        if (l) setLog(JSON.parse(l.value));
+        const m = localStorage.getItem("pharm-meds-v3");
+        if (m) setMedications(JSON.parse(m));
+        const o = localStorage.getItem("pharm-orders-v3");
+        if (o) setOrders(JSON.parse(o));
+        const l = localStorage.getItem("pharm-log-v3");
+        if (l) setLog(JSON.parse(l));
       } catch {}
       setLoaded(true);
     })();
   }, []);
 
-  useEffect(() => { if (loaded) window.storage.set("pharm-meds-v3", JSON.stringify(medications)).catch(() => {}); }, [medications, loaded]);
-  useEffect(() => { if (loaded) window.storage.set("pharm-orders-v3", JSON.stringify(orders)).catch(() => {}); }, [orders, loaded]);
-  useEffect(() => { if (loaded) window.storage.set("pharm-log-v3", JSON.stringify(log)).catch(() => {}); }, [log, loaded]);
+  useEffect(() => { if (loaded) localStorage.setItem("pharm-meds-v3", JSON.stringify(medications)); }, [medications, loaded]);
+  useEffect(() => { if (loaded) localStorage.setItem("pharm-orders-v3", JSON.stringify(orders)); }, [orders, loaded]);
+  useEffect(() => { if (loaded) localStorage.setItem("pharm-log-v3", JSON.stringify(log)); }, [log, loaded]);
 
   const notify = (msg, type = "success") => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 4000); };
 
