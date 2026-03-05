@@ -16,7 +16,7 @@ const supplierColor = { Cencora: "#6366f1", McKesson: "#2563eb", PharmSaver: "#1
 
 function Badge({ qty, threshold }) {
   const s = statusColor(qty, threshold);
-  return <span style={{ background: s.bg, color: s.text, padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700" }}>{s.label}</span>;
+  return <span style={{ background: s.bg, color: s.text, padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700", whiteSpace: "nowrap", display: "inline-block" }}>{s.label}</span>;
 }
 
 function SupplierBadge({ supplier }) {
@@ -475,49 +475,67 @@ function ScanStation({ medications, setMedications, setLog, notify }) {
     if (c.length === 12 && c.startsWith("3")) ten = c.slice(1, 11);
     else if (c.length === 11 && c.startsWith("3")) ten = c.slice(1);
 
-    // Build all candidate NDC formats to try
+    // Build all candidate NDC formats: 5-3-2, 5-4-2, 4-4-2
     const ndc532 = `${ten.slice(0,5)}-${ten.slice(5,8)}-${ten.slice(8)}`;
     const ndc542 = `${ten.slice(0,5)}-${ten.slice(5,9)}-${ten.slice(9)}`;
     const ndc442 = `${ten.slice(0,4)}-${ten.slice(4,8)}-${ten.slice(8)}`;
-    const ndcDisplay = ndc532; // show 5-3-2 in UI while searching
 
-    setDebugInfo(`Looking up NDC: ${ndc532} / ${ndc442} via Claude AI...`);
-    setFdaLookup({ loading: true, ndc: ndcDisplay });
+    setDebugInfo(`Searching FDA: ${ndc532} / ${ndc442}...`);
+    setFdaLookup({ loading: true, ndc: ndc532 });
+
+    // Try each format against the free openFDA NDC API (no key required)
+    const tryFDA = async (productNDC) => {
+      const url = `https://api.fda.gov/drug/ndc.json?search=product_ndc:"${productNDC}"&limit=1`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.results?.[0] || null;
+    };
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 400,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-          messages: [{
-            role: "user",
-            content: `Look up this drug barcode in the FDA NDC directory. The 10-digit NDC extracted from the barcode is: ${ten}
-This could be formatted as any of these: ${ndc532} (5-3-2) OR ${ndc442} (4-4-2) OR ${ndc542} (5-4-2).
-Search ndclist.com or dailymed.nlm.nih.gov for the correct one and return ONLY a JSON object, no explanation, no markdown:
-{"name":"full drug name with strength dosage form and pack count e.g. Creon (pancrelipase) Delayed Release Capsules 36000 units (100)","genericName":"generic name","brandName":"brand name or empty","packSize":number,"unitLabel":"tablets or capsules or mL or g","labeler":"manufacturer name","ndc":"the correct NDC with dashes","found":true}
-If not found: {"found":false}`
-          }]
-        })
-      });
-      const data = await response.json();
-      const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("").trim().replace(/```json|```/g, "").trim();
-      const result = JSON.parse(text);
-      if (result.found) {
-        const finalNDC = result.ndc || ndcDisplay;
-        setFdaLookup({ loading: false, ndc: finalNDC, name: result.name, packSize: result.packSize || 1, unitLabel: result.unitLabel || "units", labeler: result.labeler, notFound: false });
-        setDebugInfo(`✓ Found: ${result.name}`);
+      // Try product_ndc queries (labeler-product portion only, no package code)
+      const queries = [
+        ndc532.split("-").slice(0,2).join("-"),  // 5-3 portion
+        ndc542.split("-").slice(0,2).join("-"),  // 5-4 portion
+        ndc442.split("-").slice(0,2).join("-"),  // 4-4 portion
+      ];
+
+      let result = null;
+      let matchedNDC = ndc532;
+      for (let i = 0; i < queries.length; i++) {
+        result = await tryFDA(queries[i]);
+        if (result) { matchedNDC = [ndc532, ndc542, ndc442][i]; break; }
+      }
+
+      if (result) {
+        const generic = result.generic_name || "";
+        const brand = result.brand_name || "";
+        const strength = result.active_ingredients?.[0]?.strength || "";
+        const form = result.dosage_form || "";
+        const pkg = result.packaging?.[0]?.description || "";
+        const packMatch = pkg.match(/^(\d+)/);
+        const packSize = packMatch ? parseInt(packMatch[1]) : 1;
+        const upper = form.toUpperCase();
+        const unitLabel = upper.includes("TABLET") ? "tablets"
+          : upper.includes("CAPSULE") ? "capsules"
+          : upper.includes("SOLUTION") || upper.includes("SUSPENSION") || upper.includes("SPRAY") ? "mL"
+          : upper.includes("OINTMENT") || upper.includes("CREAM") || upper.includes("GEL") ? "g"
+          : upper.includes("PATCH") ? "patches"
+          : upper.includes("INJECT") ? "vials"
+          : "units";
+        const name = `${brand ? brand + " " : ""}${generic} ${strength} ${form} (${packSize})`.trim();
+        const finalNDC = result.product_ndc ? `${result.product_ndc}-${matchedNDC.split("-")[2]}` : matchedNDC;
+        setFdaLookup({ loading: false, ndc: finalNDC, name, packSize, unitLabel, labeler: result.labeler_name, notFound: false });
+        setDebugInfo(`✓ Found: ${name}`);
       } else {
-        setFdaLookup({ loading: false, ndc: ndcDisplay, notFound: true });
-        setDebugInfo(`✗ NDC not found: ${ndc532} / ${ndc442}`);
+        setFdaLookup({ loading: false, ndc: ndc532, notFound: true });
+        setDebugInfo(`✗ Not found in FDA database`);
       }
     } catch(e) {
-      setFdaLookup({ loading: false, ndc: ndcDisplay, notFound: true });
-      setDebugInfo(`✗ Lookup error: ${e.message}`);
+      setFdaLookup({ loading: false, ndc: ndc532, notFound: true });
+      setDebugInfo(`✗ FDA lookup error: ${e.message}`);
     }
   };
+
 
   const processScan = (val) => {
     const clean = val.replace(/[-\s]/g, "");
@@ -729,6 +747,8 @@ export default function PharmacyInventory() {
   const [notification, setNotification] = useState(null);
 
   const emptyMed = { name: "", ndc: "", quantity: "", threshold: "", supplier: SUPPLIERS[0] };
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ threshold: "", supplier: "" });
   const emptyOrder = { medId: "", supplier: SUPPLIERS[0], quantity: "", pricePerUnit: "", orderRef: "", notes: "" };
   const emptyReceive = { medId: "", quantity: "", supplier: SUPPLIERS[0], staff: "", pricePerUnit: "" };
   const emptyDispense = { medId: "", quantity: "", staff: "", notes: "" };
@@ -758,6 +778,13 @@ export default function PharmacyInventory() {
 
   const notify = (msg, type = "success") => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 4000); };
 
+  const startEdit = (m) => { setEditingId(m.id); setEditForm({ threshold: String(m.threshold), supplier: m.supplier }); };
+  const saveEdit = (id) => {
+    if (!editForm.threshold) return;
+    setMedications(prev => prev.map(m => m.id === id ? { ...m, threshold: parseInt(editForm.threshold), supplier: editForm.supplier } : m));
+    setEditingId(null);
+    notify("✓ Settings updated");
+  };
   const addMedication = () => {
     if (!medForm.name.trim() || !medForm.ndc.trim() || !medForm.quantity || !medForm.threshold) return notify("Please fill all fields.", "error");
     setMedications(prev => [...prev, { id: Date.now(), ...medForm, quantity: parseInt(medForm.quantity), threshold: parseInt(medForm.threshold) }]);
@@ -950,17 +977,50 @@ export default function PharmacyInventory() {
               <input style={{ ...s.input, marginBottom: "14px" }} placeholder="🔍 Search by name or NDC..." value={search} onChange={e => setSearch(e.target.value)} />
               {filtered.length === 0 ? <div style={s.emptyState}>No medications yet.</div> :
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead><tr><th style={s.th}>Medication</th><th style={s.th}>NDC</th><th style={s.th}>Qty</th><th style={s.th}>Threshold</th><th style={s.th}>Supplier</th><th style={s.th}>Status</th></tr></thead>
-                  <tbody>{filtered.map(m => (
-                    <tr key={m.id}>
-                      <td style={{ ...s.td, fontWeight: "700", color: "#1a2744" }}>{m.name}</td>
-                      <td style={{ ...s.td, fontFamily: "monospace", color: "#6b7fa3", fontSize: "12px" }}>{m.ndc}</td>
-                      <td style={{ ...s.td, fontWeight: "800", fontSize: "16px", color: m.quantity === 0 ? "#f87171" : m.quantity <= m.threshold ? "#fb923c" : "#34d399" }}>{fmt(m.quantity)}</td>
-                      <td style={{ ...s.td, color: "#6b7fa3" }}>{fmt(m.threshold)}</td>
-                      <td style={s.td}><SupplierBadge supplier={m.supplier} /></td>
-                      <td style={s.td}><Badge qty={m.quantity} threshold={m.threshold} /></td>
-                    </tr>
-                  ))}</tbody>
+                  <thead><tr>
+                    <th style={s.th}>Medication</th>
+                    <th style={s.th}>NDC</th>
+                    <th style={s.th}>Qty</th>
+                    <th style={s.th}>Threshold</th>
+                    <th style={s.th}>Supplier</th>
+                    <th style={s.th}>Status</th>
+                    <th style={s.th}></th>
+                  </tr></thead>
+                  <tbody>{filtered.map(m => {
+                    const isEditing = editingId === m.id;
+                    return (
+                      <tr key={m.id} style={{ background: isEditing ? "#f0f6ff" : "transparent" }}>
+                        <td style={{ ...s.td, fontWeight: "700", color: "#1a2744" }}>{m.name}</td>
+                        <td style={{ ...s.td, fontFamily: "monospace", color: "#6b7fa3", fontSize: "12px" }}>{m.ndc}</td>
+                        <td style={{ ...s.td, fontWeight: "800", fontSize: "16px", color: m.quantity === 0 ? "#dc2626" : m.quantity <= m.threshold ? "#c2410c" : "#15803d" }}>{fmt(m.quantity)}</td>
+                        <td style={s.td}>
+                          {isEditing
+                            ? <input type="number" value={editForm.threshold} onChange={e => setEditForm(f => ({ ...f, threshold: e.target.value }))}
+                                style={{ width: "70px", padding: "6px 8px", border: "2px solid #2563eb", borderRadius: "6px", fontSize: "13px", fontFamily: "'IBM Plex Sans', sans-serif", outline: "none", color: "#1a2744" }} />
+                            : <span style={{ color: "#6b7fa3" }}>{fmt(m.threshold)}</span>
+                          }
+                        </td>
+                        <td style={s.td}>
+                          {isEditing
+                            ? <select value={editForm.supplier} onChange={e => setEditForm(f => ({ ...f, supplier: e.target.value }))}
+                                style={{ padding: "6px 8px", border: "2px solid #2563eb", borderRadius: "6px", fontSize: "13px", fontFamily: "'IBM Plex Sans', sans-serif", outline: "none", color: "#1a2744", background: "#fff" }}>
+                                {SUPPLIERS.map(s => <option key={s}>{s}</option>)}
+                              </select>
+                            : <SupplierBadge supplier={m.supplier} />
+                          }
+                        </td>
+                        <td style={s.td}><Badge qty={m.quantity} threshold={m.threshold} /></td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap" }}>
+                          {isEditing ? (<>
+                            <button onClick={() => saveEdit(m.id)} style={{ padding: "5px 12px", background: "#2563eb", border: "none", borderRadius: "6px", color: "#fff", fontWeight: "700", fontSize: "12px", cursor: "pointer", marginRight: "6px", fontFamily: "'IBM Plex Sans', sans-serif" }}>✓ Save</button>
+                            <button onClick={() => setEditingId(null)} style={{ padding: "5px 10px", background: "#f1f5f9", border: "1px solid #d0dae8", borderRadius: "6px", color: "#64748b", fontSize: "12px", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" }}>✕</button>
+                          </>) : (
+                            <button onClick={() => startEdit(m)} style={{ padding: "5px 12px", background: "#f1f5f9", border: "1px solid #d0dae8", borderRadius: "6px", color: "#1a2744", fontSize: "12px", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" }}>✏️ Edit</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}</tbody>
                 </table>
               }
             </div>
@@ -1078,3 +1138,5 @@ export default function PharmacyInventory() {
     </>
   );
 }
+
+export default PharmacyInventory;
